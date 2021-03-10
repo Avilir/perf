@@ -1,8 +1,7 @@
 ARG ARCH=
 FROM ${ARCH}alpine:latest
+
 RUN apk update 
-RUN apk add rsync
-RUN apk add fio
+RUN apk add git rsync fio
 
 CMD ["/bin/sh"]
-
