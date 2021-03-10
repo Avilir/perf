@@ -32,7 +32,7 @@ usage() {
 
 Multi=0
 Platforms="linux/amd64,linux/ppc64le,linux/s390x"
-CMD_TOOL='podman'  # if you want this can be replace with : 'docker'
+CMD_TOOL='docker'  # if you want this can be replace with : 'docker'
 
 while getopts ":t:r:m" o; do
     case "${o}" in
@@ -69,6 +69,7 @@ if [[ ${Multi} -eq 0 ]] ; then
 	${CMD_TOOL} push ${Repo}:${Tag}
 else
 	echo "Building the image for Multi Arch"
+	echo "Going ro run : docker buildx build --push --platform ${Platforms} --tag ${Repo}:${Tag} ."
 	docker buildx build --push --platform ${Platforms} --tag ${Repo}:${Tag} .
 fi
 
