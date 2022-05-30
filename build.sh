@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 
-##############################################################################
-#
-# This script is for building generic performance container and push it to repository.
-# it used the 'podman' for the build and accept the build TAG 
-# from the user.
-# without the tag the script will stop and exit with error.
-# the script must be run from the top directory of the esdump.
-#
-# the repository that it will create is on quay, but this can be changed.
-#
-# Author : Avi Liani <alayani@redhat.com>
-# Creation date : Mar,04,2021
-#
-# Updates :
-#  Mar,10 2021 - adding abilite for multi-arch
-#
-##############################################################################
+#################################################################################
+#                                                                               #
+# This script is for building generic performance container and push it to      #
+# repository. it used the 'docker' for the build and accept the build TAG,      #
+# the repo to push into, a dockerfile and the ability to build multi-arch image #
+#                                                                               #
+#################################################################################
 
-usage() { 
-	echo "Usage: $0 [-t <image tag>] -r <repo name> [-m] [-h]" 1>&2
+# Build multi-arch image - default is no (0)
+Multi=0
+
+# List of architecture for the multi-arch build
+Platforms="linux/amd64,linux/ppc64le,linux/s390x,linux/arm64"
+
+# The tool to use for the build.
+# using docker since podman doesn't not support the multi-arch
+CMD_TOOL="docker"
+
+usage() {
+  # Display the script usage and exit the script
+	echo "Usage: $0 -f <filename> -r <repo name> [-t <image tag>] [-m] [-h]"
+	echo "  -f <filename>  : the filename which used for building"
 	echo "  -t <image tag> : the tagging of the image - default is 'latest'"
 	echo "  -r <repo name> : full repository name including registry site"
 	echo "                   e.g. : docker.io/<username>/<repo name>"
@@ -30,21 +32,22 @@ usage() {
 	exit 1
 }
 
-Multi=0
-Platforms="linux/amd64,linux/ppc64le,linux/s390x"
-CMD_TOOL='docker'  # if you want this can be replace with : 'docker'
 
-while getopts ":t:r:m" o; do
+# parsing the command line parameters
+while getopts "t:r:f:m" o; do
     case "${o}" in
+        f)
+            Dockerfile=${OPTARG}
+            ;;
         t)
             Tag=${OPTARG}
             ;;
         r)
             Repo=${OPTARG}
             ;;
-	m)  
-	    Multi=1
-	    ;;
+	      m)
+	          Multi=1
+	          ;;
         *)
             usage
             ;;
@@ -52,24 +55,45 @@ while getopts ":t:r:m" o; do
 done
 shift $((OPTIND-1))
 
-
-if [[ ${Tag} == "" ]] ; then
-	echo "no tag provided, going to use 'latest'"
-	Tag='latest'
-fi
-
+# Validate that image repository provided
 if [[ ${Repo} == "" ]] ; then
 	echo "Error: you mast give the Base path for the repository!"
 	usage
 fi
 
-if [[ ${Multi} -eq 0 ]] ; then
-	echo "Building the image for x86_64 Arch only"
-	${CMD_TOOL} build --tag ${Repo}:${Tag} .
-	${CMD_TOOL} push ${Repo}:${Tag}
-else
-	echo "Building the image for Multi Arch"
-	echo "Going ro run : docker buildx build --push --platform ${Platforms} --tag ${Repo}:${Tag} ."
-	docker buildx build --push --platform ${Platforms} --tag ${Repo}:${Tag} .
+# validate the image tag, if not exist, use 'latest'
+if [[ ${Tag} == "" ]] ; then
+	echo "no tag provided, going to use 'latest'"
+	Tag='latest'
 fi
 
+# Validate that Dockerfile is provided
+if [[ ${Dockerfile} == "" ]] ; then
+  echo "No dockerfile supplied, using 'Dockerfile' in current dir"
+  Dockerfile='Dockerfile'
+
+fi
+
+# Validate that the Dockerfile is exist
+if [[ ! -f ${Dockerfile} ]] ; then
+  echo "Error : Dockerfile does not exist !"
+  exit 2
+fi
+
+# Creating the appropriate build command (single/multi arch)
+if [[ ${Multi} -eq 0 ]] ; then
+	echo "Building the image for x86_64 Arch only"
+	CMD="${CMD_TOOL} build --tag ${Repo}:${Tag} --file ${Dockerfile} ."
+else
+	echo "Building the image for Multi Arch"
+	CMD="${CMD_TOOL} buildx build --push --platform ${Platforms} --tag ${Repo}:${Tag} --file ${Dockerfile} ."
+fi
+
+# Run the build command
+echo "Going to run : ${CMD}"
+${CMD}
+
+# Push the image - for single arch only, the multi-arch push is done during the build
+if [[ ${Multi} -eq 0 ]] ; then
+  ${CMD_TOOL} push ${Repo}:${Tag}
+fi
